@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MVP Monitoring & IOC Dashboard</title>
+  <meta name="description" content="MVP frontend for real-time uptime monitoring and IOC (IP/Domain) threat detection." />
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #0f172a;
+      --muted: #94a3b8;
+      --text: #e2e8f0;
+      --accent: #3b82f6; /* blue */
+      --ok: #10b981;     /* green */
+      --warn: #f59e0b;   /* yellow */
+      --bad: #ef4444;    /* red */
+      --card: #111827;   /* slightly lighter panel */
+      --chip: #1f2937;
+      --radius: 16px;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #060a12 0%, var(--bg) 100%);
+      color: var(--text);
+      font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+
+    header {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: saturate(160%) blur(8px);
+      background: rgba(11,18,32,.7);
+      border-bottom: 1px solid rgba(148,163,184,.15);
+    }
+    .nav {
+      max-width: 1200px; margin: 0 auto; padding: 14px 18px;
+      display: flex; align-items: center; gap: 16px; justify-content: space-between;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing:.3px; }
+    .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 20px var(--accent); }
+    .actions { display: flex; align-items: center; gap: 10px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+      border: 1px solid rgba(148,163,184,.2); color: var(--text);
+      background: linear-gradient(180deg, #0f172a, #0b1220);
+      padding: 8px 12px; border-radius: 999px; transition: .2s ease; text-decoration: none; font-weight: 600;
+    }
+    .btn:hover { transform: translateY(-1px); border-color: rgba(148,163,184,.35); }
+    .btn.primary { background: linear-gradient(180deg, #2563eb, #1d4ed8); border-color: transparent; }
+
+    .container { max-width: 1200px; margin: 20px auto; padding: 0 18px 80px; }
+
+    .grid {
+      display: grid; gap: 16px;
+      grid-template-columns: 1.2fr .8fr;
+    }
+    @media (max-width: 1024px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .panel { background: var(--panel); border: 1px solid rgba(148,163,184,.15); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .panel > .head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid rgba(148,163,184,.12); }
+    .panel > .body { padding: 14px 16px; }
+
+    .cards { display: grid; gap: 12px; grid-template-columns: repeat(4, 1fr); }
+    @media (max-width: 900px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .cards { grid-template-columns: 1fr; } }
+
+    .card { background: var(--card); border: 1px solid rgba(148,163,184,.12); border-radius: 14px; padding: 14px; display: grid; gap: 6px; }
+    .card .label { color: var(--muted); font-size: 12px; }
+    .card .value { font-size: 22px; font-weight: 800; letter-spacing:.3px; }
+    .badge { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--chip); border: 1px solid rgba(148,163,184,.15); }
+    .badge.ok { background: rgba(16,185,129,.12); color: #34d399; border-color: rgba(16,185,129,.35); }
+    .badge.warn { background: rgba(245,158,11,.12); color: #fbbf24; border-color: rgba(245,158,11,.35); }
+    .badge.bad { background: rgba(239,68,68,.12); color: #f87171; border-color: rgba(239,68,68,.35); }
+
+    .chart-wrap { height: 220px; position: relative; }
+    canvas { width: 100%; height: 100%; display: block; }
+
+    .stream {
+      display: grid; gap: 8px; max-height: 260px; overflow: auto; padding-right: 2px;
+    }
+    .event { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; align-items: center; background: #0c1426; border: 1px solid rgba(148,163,184,.1); padding: 10px 12px; border-radius: 12px; }
+    .event .time { color: var(--muted); font-size: 12px; }
+
+    .iocs { display: grid; gap: 8px; }
+    .iocs .row { display: grid; grid-template-columns: 1.2fr .7fr .6fr auto; gap: 10px; align-items: center; background: #0c1426; border: 1px solid rgba(148,163,184,.1); padding: 10px 12px; border-radius: 12px; }
+    .iocs .row .kind { color: var(--muted); font-size: 12px; }
+    .iocs .row .ioc { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .form { display: grid; grid-template-columns: .5fr 1fr auto; gap: 10px; }
+    .input, select {
+      background: #0c1426; color: var(--text); border: 1px solid rgba(148,163,184,.2); border-radius: 12px; padding: 10px 12px; outline: none;
+    }
+    .input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,.25); }
+
+    .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+    footer { color: var(--muted); text-align: center; padding: 24px; }
+    .pill { padding: 4px 10px; border-radius: 999px; border:1px solid rgba(148,163,184,.15); background: #0c1426; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="nav" role="navigation" aria-label="Main">
+      <div class="brand" aria-label="Brand">
+        <span class="dot" aria-hidden="true"></span>
+        <span>MVP Monitor</span>
+        <span class="pill" id="env-pill" title="Toggle data source">Mock</span>
+      </div>
+      <div class="actions">
+        <button class="btn" id="connectBtn">Connect</button>
+        <a class="btn primary" href="#" id="ackAll">Acknowledge All Alerts</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Status Cards -->
+    <section class="cards" aria-label="Key stats">
+      <div class="card">
+        <div class="label">Overall Uptime (24h)</div>
+        <div class="value" id="uptimeValue">—</div>
+        <span class="badge ok" id="statusBadge">Healthy</span>
+      </div>
+      <div class="card">
+        <div class="label">Avg Response Time</div>
+        <div class="value" id="rtValue">—</div>
+        <span class="badge">ms</span>
+      </div>
+      <div class="card">
+        <div class="label">Active Alerts</div>
+        <div class="value" id="alertsValue">0</div>
+        <span class="badge warn">Watching</span>
+      </div>
+      <div class="card">
+        <div class="label">Monitored Services</div>
+        <div class="value" id="servicesValue">—</div>
+        <span class="badge">services</span>
+      </div>
+    </section>
+
+    <div class="grid" style="margin-top:16px;">
+      <!-- Left column -->
+      <section class="panel" aria-label="Uptime & Events">
+        <div class="head">
+          <strong>Uptime (last 60 min)</strong>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span class="badge" id="sampleRate">1s tick</span>
+            <button class="btn" id="pauseBtn" aria-pressed="false">Pause</button>
+          </div>
+        </div>
+        <div class="body">
+          <div class="chart-wrap">
+            <canvas id="uptimeChart" width="800" height="220" aria-label="Uptime chart" role="img"></canvas>
+          </div>
+
+          <div style="margin-top:14px; display:grid; gap:8px;">
+            <strong>Recent Events</strong>
+            <div class="stream" id="eventStream" aria-live="polite" aria-relevant="additions"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right column -->
+      <section class="panel" aria-label="IOC Threats">
+        <div class="head">
+          <strong>IOC Watchlist</strong>
+          <div class="hint">IPs & domains to monitor</div>
+        </div>
+        <div class="body">
+          <form id="iocForm" class="form" autocomplete="off">
+            <select id="iocType" aria-label="IOC type">
+              <option value="ip">IP</option>
+              <option value="domain">Domain</option>
+            </select>
+            <input id="iocValue" class="input" placeholder="e.g., 45.155.205.1 or bad.example.com" required />
+            <button class="btn primary" type="submit">Add</button>
+          </form>
+          <div class="hint">Tip: Add any IP/domain you want the system to flag. On the backend, validate and enrich via VirusTotal/AbuseIPDB/OTX.</div>
+
+          <div class="iocs" id="iocList" style="margin-top:12px;" aria-live="polite"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Alerts Panel -->
+    <section class="panel" style="margin-top:16px;" aria-label="Alerts">
+      <div class="head">
+        <strong>Alerts</strong>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span class="badge bad" id="criticalCount">0 Critical</span>
+          <span class="badge warn" id="warningCount">0 Warning</span>
+        </div>
+      </div>
+      <div class="body">
+        <div class="stream" id="alertsStream" aria-live="polite"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>© <span id="year"></span> MVP Monitor • Frontend only. Hook to your APIs for live data.</small>
+  </footer>
+
+  <script>
+    // ======= CONFIG (adjust endpoints when backend is ready) =======
+    const CONFIG = {
+      mock: true,                       // Toggle with pill click
+      sampleMs: 1000,                   // 1s tick for demo
+      maxPoints: 60,                    // last 60 ticks ~ 1 minute
+      endpoints: {
+        metrics: '/api/metrics',        // { uptimePct, responseMs, services }
+        events: '/api/events',          // [{ts, level, msg}]
+        iocs: '/api/iocs',              // GET/POST/DELETE
+        lookup: '/api/iocs/lookup',     // POST { type, value } -> { status, vendor, score }
+        alerts: '/api/alerts'           // [{ts, severity, title, detail}]
+      }
+    };
+
+    // ======= ELEMENTS =======
+    const uptimeEl = document.getElementById('uptimeValue');
+    const rtEl = document.getElementById('rtValue');
+    const servicesEl = document.getElementById('servicesValue');
+    const statusBadge = document.getElementById('statusBadge');
+    const sampleRate = document.getElementById('sampleRate');
+    const eventStream = document.getElementById('eventStream');
+    const alertsStream = document.getElementById('alertsStream');
+    const alertsValue = document.getElementById('alertsValue');
+    const critEl = document.getElementById('criticalCount');
+    const warnEl = document.getElementById('warningCount');
+    const envPill = document.getElementById('env-pill');
+    const connectBtn = document.getElementById('connectBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    // ======= CHART (vanilla canvas) =======
+    const canvas = document.getElementById('uptimeChart');
+    const ctx = canvas.getContext('2d');
+    let points = []; // values 0..100
+
+    function drawChart() {
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0,0,w,h);
+      // grid
+      ctx.globalAlpha = .25;
+      ctx.strokeStyle = '#2b3855';
+      for (let y = 0; y <= 5; y++) {
+        const yy = (h - 20) - (y * (h - 40) / 5);
+        ctx.beginPath(); ctx.moveTo(40, yy); ctx.lineTo(w - 10, yy); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      // axes
+      ctx.strokeStyle = '#475569';
+      ctx.beginPath(); ctx.moveTo(40, 10); ctx.lineTo(40, h - 20); ctx.lineTo(w - 10, h - 20); ctx.stroke();
+      // labels
+      ctx.fillStyle = '#94a3b8'; ctx.font = '12px system-ui';
+      ctx.fillText('100%', 6, 16); ctx.fillText('0%', 16, h - 22);
+
+      if (!points.length) return;
+      // polyline
+      const maxN = CONFIG.maxPoints;
+      const dx = (w - 60) / (maxN - 1);
+      ctx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        const x = 40 + i * dx;
+        const y = (h - 20) - (points[i] / 100) * (h - 40);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2; ctx.stroke();
+      // fill under
+      const lastX = 40 + (points.length - 1) * dx;
+      ctx.lineTo(lastX, h - 20); ctx.lineTo(40, h - 20); ctx.closePath();
+      ctx.globalAlpha = .15; ctx.fillStyle = '#3b82f6'; ctx.fill(); ctx.globalAlpha = 1;
+    }
+
+    // ======= MOCK DATA GEN =======
+    function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+    function mockMetrics() {
+      const last = points[points.length - 1] ?? 99;
+      const next = Math.max(80, Math.min(100, last + rand(-3, 3)));
+      return {
+        uptimePct: next + Math.random()*0.4,
+        responseMs: rand(120, 380),
+        services: 18,
+        status: next > 95 ? 'Healthy' : (next > 90 ? 'Degraded' : 'Outage')
+      };
+    }
+    function mockEvent() {
+      const levels = ['INFO','WARN','ERROR'];
+      const level = levels[rand(0,2)];
+      const msgs = {
+        INFO: ['Heartbeat OK','Service check passed','Agent sync complete'],
+        WARN: ['High latency detected','Packet loss spike','CPU usage > 85%'],
+        ERROR:['Service unreachable','Downtime detected','Auth failures detected']
+      };
+      return { ts: Date.now(), level, msg: msgs[level][rand(0,2)] };
+    }
+    function mockAlert() {
+      const sev = ['warning','critical'][rand(0,1)];
+      const titles = { warning: ['Latency spike','Suspicious domain lookup'], critical: ['Service outage','Malicious IP contact'] };
+      return { ts: Date.now(), severity: sev, title: titles[sev][rand(0,1)], detail: 'Auto-generated sample alert.' };
+    }
+
+    // ======= DOM HELPERS =======
+    function fmtTime(ts) { return new Date(ts).toLocaleTimeString(); }
+    function badgeFor(level) {
+      const span = document.createElement('span'); span.className = 'badge'; span.textContent = level;
+      if (level === 'INFO') span.classList.add('ok');
+      if (level === 'WARN') span.classList.add('warn');
+      if (level === 'ERROR') span.classList.add('bad');
+      return span;
+    }
+    function eventRow(e) {
+      const div = document.createElement('div'); div.className = 'event';
+      const t = document.createElement('div'); t.className = 'time'; t.textContent = fmtTime(e.ts);
+      const m = document.createElement('div'); m.textContent = e.msg;
+      const b = badgeFor(e.level);
+      div.append(t,m,b); return div;
+    }
+    function alertRow(a) {
+      const div = document.createElement('div'); div.className = 'event';
+      const t = document.createElement('div'); t.className = 'time'; t.textContent = fmtTime(a.ts);
+      const m = document.createElement('div'); m.innerHTML = `<strong>${a.title}</strong> — ${a.detail}`;
+      const b = document.createElement('span'); b.className = 'badge ' + (a.severity === 'critical' ? 'bad' : 'warn'); b.textContent = a.severity.toUpperCase();
+      div.append(t,m,b); return div;
+    }
+
+    // ======= IOC LIST =======
+    const iocList = document.getElementById('iocList');
+    const iocForm = document.getElementById('iocForm');
+    const iocType = document.getElementById('iocType');
+    const iocValue = document.getElementById('iocValue');
+
+    /** local in-memory store for demo */
+    const IOCS = [];
+
+    function renderIOCs() {
+      iocList.innerHTML = '';
+      if (!IOCS.length) {
+        const empty = document.createElement('div'); empty.className = 'hint'; empty.textContent = 'No IOCs yet. Add one above.'; iocList.append(empty); return;
+      }
+      IOCS.forEach((row, idx) => {
+        const div = document.createElement('div'); div.className = 'row';
+        const i = document.createElement('div'); i.className = 'ioc'; i.textContent = row.value;
+        const k = document.createElement('div'); k.className = 'kind'; k.textContent = row.type.toUpperCase();
+        const s = document.createElement('span'); s.className = 'badge ' + (row.status === 'malicious' ? 'bad' : row.status === 'suspicious' ? 'warn' : 'ok'); s.textContent = row.status || 'unknown';
+        const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
+        const lookup = document.createElement('button'); lookup.className = 'btn'; lookup.textContent = 'Lookup';
+        const remove = document.createElement('button'); remove.className = 'btn'; remove.textContent = 'Remove';
+        lookup.addEventListener('click', async () => {
+          s.textContent = 'checking…'; s.className = 'badge';
+          const res = await lookupIOC(row.type, row.value);
+          row.status = res.status; row.vendor = res.vendor; row.score = res.score;
+          s.textContent = `${row.status}${row.score != null ? ` (${row.score})` : ''}`;
+          s.className = 'badge ' + (row.status === 'malicious' ? 'bad' : row.status === 'suspicious' ? 'warn' : 'ok');
+        });
+        remove.addEventListener('click', () => { IOCS.splice(idx,1); renderIOCs(); });
+        actions.append(lookup, remove);
+        div.append(i, k, s, actions);
+        iocList.append(div);
+      });
+    }
+
+    iocForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const type = iocType.value; const value = iocValue.value.trim();
+      if (!value) return;
+      IOCS.unshift({ type, value, status: 'unknown' });
+      iocValue.value = '';
+      renderIOCs();
+    });
+
+    async function lookupIOC(type, value) {
+      if (CONFIG.mock) {
+        // simulate vendor score 0-100 (higher = worse)
+        const score = rand(0,100);
+        const status = score > 80 ? 'malicious' : score > 50 ? 'suspicious' : 'clean';
+        return new Promise(r => setTimeout(() => r({ status, vendor: 'MockTI', score }), 500));
+      } else {
+        const r = await fetch(CONFIG.endpoints.lookup, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, value }) });
+        if (!r.ok) throw new Error('Lookup failed');
+        return r.json();
+      }
+    }
+
+    // ======= LIVE LOOP =======
+    let timer = null, paused = false;
+    function tick() {
+      // pull or mock metrics
+      const m = CONFIG.mock ? mockMetrics() : null; // replace with fetch to metrics endpoint
+      const value = (m?.uptimePct ?? 99);
+      if (points.length >= CONFIG.maxPoints) points.shift();
+      points.push(value);
+
+      // update stats
+      uptimeEl.textContent = (m?.uptimePct ?? 99).toFixed(2) + '%';
+      rtEl.textContent = (m?.responseMs ?? 200);
+      servicesEl.textContent = (m?.services ?? 18);
+      statusBadge.textContent = (m?.status ?? 'Healthy');
+      statusBadge.className = 'badge ' + (m?.status === 'Healthy' ? 'ok' : m?.status === 'Degraded' ? 'warn' : 'bad');
+
+      // events & alerts stream (mock)
+      const ev = mockEvent(); eventStream.prepend(eventRow(ev));
+      if (eventStream.children.length > 60) eventStream.removeChild(eventStream.lastChild);
+
+      if (Math.random() < 0.25) { // sometimes add alert
+        const al = mockAlert(); alertsStream.prepend(alertRow(al));
+        updateAlertCounts();
+      }
+
+      drawChart();
+    }
+
+    function updateAlertCounts() {
+      let critical = 0, warning = 0;
+      for (const node of alertsStream.children) {
+        const tag = node.querySelector('.badge');
+        if (!tag) continue;
+        if (tag.textContent === 'CRITICAL') critical++; else warning++;
+      }
+      critEl.textContent = critical + ' Critical';
+      warnEl.textContent = warning + ' Warning';
+      alertsValue.textContent = critical + warning;
+    }
+
+    function start() { if (!timer) timer = setInterval(() => { if (!paused) tick(); }, CONFIG.sampleMs); }
+    function stop() { clearInterval(timer); timer = null; }
+
+    // ======= UI WIRING =======
+    envPill.addEventListener('click', () => {
+      CONFIG.mock = !CONFIG.mock; envPill.textContent = CONFIG.mock ? 'Mock' : 'Live';
+      // In Live mode, replace mock calls with fetch/WebSocket logic below.
+    });
+
+    connectBtn.addEventListener('click', async () => {
+      if (CONFIG.mock) { start(); connectBtn.textContent = 'Connected (Mock)'; return; }
+      // Example for real-time via EventSource (SSE)
+      try {
+        const es = new EventSource('/api/metrics/stream');
+        es.onmessage = (e) => {
+          const m = JSON.parse(e.data);
+          if (points.length >= CONFIG.maxPoints) points.shift();
+          points.push(Number(m.uptimePct));
+          uptimeEl.textContent = Number(m.uptimePct).toFixed(2) + '%';
+          rtEl.textContent = m.responseMs; servicesEl.textContent = m.services;
+          statusBadge.textContent = m.status;
+          statusBadge.className = 'badge ' + (m.status === 'Healthy' ? 'ok' : m.status === 'Degraded' ? 'warn' : 'bad');
+          drawChart();
+        };
+        connectBtn.textContent = 'Connected (Live)';
+      } catch (err) {
+        console.error(err); alert('Failed to connect to live stream. Falling back to mock.'); CONFIG.mock = true; envPill.textContent = 'Mock'; start();
+      }
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      paused = !paused; pauseBtn.setAttribute('aria-pressed', String(paused)); pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+    });
+
+    document.getElementById('ackAll').addEventListener('click', (e) => {
+      e.preventDefault(); alertsStream.innerHTML = ''; updateAlertCounts();
+    });
+
+    // ======= INIT =======
+    document.getElementById('year').textContent = new Date().getFullYear();
+    sampleRate.textContent = CONFIG.sampleMs/1000 + 's tick';
+    // Seed initial data
+    for (let i = 0; i < 20; i++) points.push(95 + Math.sin(i/2)*3 + Math.random());
+    drawChart(); start();
+
+    // ======= BACKEND NOTES =======
+    // Replace mock areas with real endpoints:
+    // - GET /api/metrics                  { uptimePct, responseMs, services, status }
+    // - GET /api/events?limit=50         [{ ts, level, msg }]
+    // - GET/POST/DELETE /api/iocs        list/add/remove IOCs
+    // - POST /api/iocs/lookup            IOC enrichment (VirusTotal, AbuseIPDB, OTX)
+    // - GET /api/alerts?limit=50         alert stream
+    // Realtime options:
+    // - Server-Sent Events at /api/metrics/stream
+    // - or WebSocket pushing {uptimePct, responseMs, services, status}
+  </script>
+</body>
+</html>
+
